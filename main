@@ -1,0 +1,452 @@
+#include <iostream>
+#include <conio.h>
+#include <Windows.h>
+#include <time.h>
+#include <random>
+using namespace std;
+const int UP = 72; 
+const int DOWN = 80; 
+const int LEFT = 75; 
+const int RIGHT = 77; 
+const int SPACE = 32; 
+const int ESC = 27; 
+const int ENTER = 13;  
+const int SIZEX = 17; 
+const int SIZEY = 20;
+const int COUNTS = 7; 
+ 
+const char SCR_SP = (char)183; 
+const char SCR_OB = (char)2; 
+
+int screen[SIZEX][SIZEY] = {0}; 
+int map[4][4];
+int px(0), py(0), score(0), nextmap(0);
+
+const int fmap[COUNTS][4][4] =
+{
+    {
+        {1, 1, 0, 0},
+        {1, 1, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    },
+    {
+        {1, 0, 0, 0},
+        {1, 0, 0, 0},
+        {1, 0, 0, 0},
+        {1, 0, 0, 0}
+    },
+    {
+        {0, 0, 1, 0},
+        {1, 1, 1, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    },
+    {
+        {1, 1, 1, 0},
+        {0, 0, 1, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    },
+    {
+        {0, 1, 1, 0},
+        {1, 1, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    },
+    {
+        {1, 1, 0, 0},
+        {0, 1, 1, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    },
+    {
+        {1, 1, 1, 0},
+        {0, 1, 0, 0},
+        {0, 0, 0, 0},
+        {0, 0, 0, 0}
+    }
+};
+
+void gotoxy(int xpos, int ypos) //прототип функции помещения курсора
+{
+	COORD scrn;
+	HANDLE hOuput = GetStdHandle(STD_OUTPUT_HANDLE);
+	scrn.X = xpos; scrn.Y = ypos;
+	SetConsoleCursorPosition(hOuput, scrn);
+}
+ 
+void print()
+{
+    int i, j;
+    int buff[SIZEX][SIZEY];
+    
+    for(i = 0; i < SIZEY; i++)
+		for(j = 0; j < SIZEX; j++)
+			buff[j][i] = screen[j][i];
+    for(i = 0; i < 4; i++)
+		for(j = 0; j < 4; j++)
+			if(map[j][i]) buff[j + px][i + py] = 1;
+ 
+    gotoxy(0, 0);
+    for(i = 0; i < SIZEY; i++)
+    {
+        for(j = 0; j < SIZEX; j++) 
+        {
+            putchar(buff[j][i] == 0 ? SCR_SP : SCR_OB); //если элемент в буфере не часть фигуры, то закрашивается полем
+        }
+        putchar('\n');
+    }
+}
+
+void printnext()
+{
+	gotoxy(SIZEX + 1 , 1);
+    cout << "Следующая фигура: ";
+    for(int i = 0; i < 4; i++)
+    {
+        gotoxy(SIZEX + 2, i + 3);
+        for(int j = 0; j < 4; j++)
+        {
+            putchar(fmap[nextmap][j][i] == 0 ? ' ' : SCR_OB); 
+        }
+    }
+}
+
+int pause()
+{
+    int c;
+    if(_kbhit())
+    {
+        if((c = getch()) == 224) 
+        c = getch();
+        return c;
+    }
+    return false;
+}
+
+bool valnewpos(int x, int y) //движение фигуры вниз
+{
+	if(x < 0) return false;
+    for(int i = 0; i < 4; i++)
+    {
+        for(int j = 0; j < 4; j++)
+        {
+            if(map[j][i])
+            {
+                if((j + x >= SIZEX) || (i + y >= SIZEY)) 
+				return false;
+                if(screen[j + x][i + y])
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+int inv(int x)
+{
+	return 3 - x;
+}
+
+void rotate() 
+{
+    int _map[4][4];
+	int sx = 4, sy = 4;
+ 
+    for(int i = 0; i < 4; i++)
+        for(int j = 0; j < 4; j++) 
+        {
+            _map[j][i] = map[j][i];//копия фигуры,что бы вернуть первоначальный вид
+            if(map[j][i])
+            {
+                if(i < sx) sx = i;
+                if(inv(j) < sy) sy = inv(j);
+            }
+            map[j][i] = 0;
+        }
+ 
+    for(int i = 0; i < 4; i++)
+        for(int j = 0; j < 4; j++)
+            if(_map[inv(i)][j]) map[j - sx][i - sy] = 1;
+    if(!valnewpos(px,py))
+		for(int i = 0; i < 4; i++)
+			for(int j = 0; j < 4; j++)
+				map[j][i] = _map[j][i];//обратно на изначальную
+}
+int rand(int max)
+{
+    max++;
+	srand(time(NULL));
+    return rand() % max;
+}
+
+void sleep(int milsec)
+{
+    clock_t t = clock();
+    while(clock() - t < milsec);
+}
+
+void deleteline()
+{
+    int i, j, k, cl;
+ 
+    for(i = SIZEY - 1; i >= 0; i--)
+    {
+        cl = 1;
+        for(j = 0, cl = 1; j < SIZEX; j++)
+        {
+            if(!screen[j][i]) cl = 0;
+        }
+        if(cl)
+        {
+            gotoxy(0, i);
+            for(k = 0; k < SIZEX; k++) putchar('_'), sleep(20);
+            
+            score += (((i * (-1)) + SIZEY) * 10);
+            for(k = i; k > 0; k--)
+            {
+                for(j = 0; j < SIZEX; j++)
+                {
+                    screen[j][k] = screen[j][k - 1];
+                }
+            }
+            i++;
+            print();
+        }
+    }
+}
+
+void create()
+{
+	for(int i = 0; i < 4; i++)
+        for(int j = 0; j < 4; j++)
+            map[j][i] = fmap[nextmap][j][i];
+    py = 0;
+    px = SIZEX / 2;
+    nextmap = rand(COUNTS - 1);
+    printnext();
+}
+
+void clearscreen()
+{
+	for(int i = 0; i < SIZEY; i++) 
+        for(int j = 0; j < SIZEX; j++) 
+            screen[j][i] = 0;
+}
+
+void game()
+{
+	time_t tm;
+    system("cls");
+    px = SIZEX / 2;//падение из центра
+    py = 0;
+    score = 0;
+    tm = clock();
+    nextmap = rand(COUNTS - 1);
+    create();
+ 
+    while(true) 
+    {
+        int c = pause();
+        switch(c)
+        {
+        case UP:
+            rotate();
+            break;
+        case SPACE:
+           rotate();
+           break;
+        case DOWN:
+            for(; valnewpos(px, py + 1); py++);
+            for(int i = 0; i < 4; i++)
+                    for(int j = 0; j < 4; j++)
+                        if(map[j][i]) screen[px + j][py + i] = 1;
+ 
+            print();
+            deleteline();
+            create();
+            break;
+        case LEFT:
+            if(valnewpos(px - 1, py)) px--;//движение влево
+            break;
+        case RIGHT:
+            if(valnewpos(px + 1, py)) px++;//движение вправо 
+            break;
+        case 'p':
+            getch();
+            break;
+        case ESC:
+            return;
+        }
+        if((clock() - tm) > 720)
+        {
+            tm = clock();
+            if(!(valnewpos(px, py + 1)))
+            {
+                for(int i = 0; i < 4; i++)
+                    for(int j = 0; j < 4; j++)
+                        if(map[j][i]) screen[px + j][py + i] = 1;
+ 
+                create();
+                deleteline();
+            }
+            else py++;
+        }
+        print();
+        for(int i = 0; i < SIZEX; i++) 
+        {
+            if(screen[i][0])
+            {
+                system("cls");
+                gotoxy(2, 2);
+                cout << "КОНЕЦ ИГРЫ!";
+                return;
+            }
+        }
+    }
+}
+void game2()
+{
+	time_t tm;
+    system("cls");
+    px = SIZEX / 2;//падение из центра
+    py = 0;
+    score = 0;
+    tm = clock();
+    nextmap = rand(COUNTS - 1);
+    create();
+    while(true) 
+    {
+        int c = pause();
+        switch(c)
+        {
+        case UP:
+            rotate();
+            break;
+        case SPACE:
+           rotate();
+           break;
+        case DOWN:
+            for(; valnewpos(px, py + 1); py++);
+            for(int i = 0; i < 4; i++)
+                    for(int j = 0; j < 4; j++)
+                        if(map[j][i]) screen[px + j][py + i] = 1;
+             print();
+            deleteline();
+            create();
+            break;
+        case LEFT:
+            if(valnewpos(px - 1, py)) px--;//движение влево
+            break;
+        case RIGHT:
+            if(valnewpos(px + 1, py)) px++;//движение вправо
+            break;
+        case 'p':
+            getch();
+            break;
+        case ESC:
+            return;
+        }
+        if((clock() - tm) > 220)
+        {
+            tm = clock();
+ 
+            if(!(valnewpos(px, py + 1)))
+            {
+                for(int i = 0; i < 4; i++)
+                    for(int j = 0; j < 4; j++)
+                        if(map[j][i]) screen[px + j][py + i] = 1;
+ 
+                create();
+                deleteline();
+            }
+            else py++;//падение вниз
+        }
+        print();
+        for(int i = 0; i < SIZEX; i++) 
+        {
+            if(screen[i][0])
+            {
+                system("cls");
+                gotoxy(2, 2);
+                cout << "КОНЕЦ ИГРЫ!";
+                return;
+            }
+        }
+    }
+}
+
+void gamemenu() 
+{
+    int p = 1, c = 0;
+    const char* GAME_MENU = "1.СТАРТ\n2.СЛОЖНЫЙ УРОВЕНЬ\n3.УПРАВЛЕНИЕ\n4.ВЫХОД\n";
+    system("cls");
+	cout << GAME_MENU;
+	while(true)
+    {
+        c = getch();
+        switch(c)
+        {
+        case '1':
+        case '2':
+        case '3':
+        case '4': p = c - '0';
+     case ENTER:
+           switch(p)
+            {
+            case 1:
+                clearscreen();
+                game();
+                gotoxy(0, SIZEY);
+				cout << "Нажми ESC для выхода\n";
+				while(getch() != ESC);
+                break;
+            case 2:
+                clearscreen();
+                game2();
+                gotoxy(0, SIZEY);
+				cout << "Нажми ESC для выхода\n";
+				while(getch() != ESC);
+                break;
+            case 3:
+                system("cls");
+                cout << 
+                "<Up>     <Поворот>\n"
+                "<Left>   <Влево>\n"
+                "<Right>  <Вправо>\n"
+                "<Down>   <Вниз>\n"
+                "<Space>  <Поворот>\n"
+                "<P>      <Пауза>\n"
+                "<ESC>    <Выход>\n";
+				getch();
+				if(kbhit())
+				getch();
+                break;
+           case 4: return;
+            }
+            system("cls");
+			cout  << GAME_MENU;
+            p = 1;
+            break;
+        case UP:
+            if(p > 1) p--;
+            break;
+        case DOWN:
+            if(p < 2) p++;
+            break;
+        case ESC:
+            return;
+        }
+    }
+}
+int main() 
+{   
+	setlocale(LC_ALL, "RUS");
+    if(kbhit())
+	getch();
+    gamemenu();
+	return 0;
+}
